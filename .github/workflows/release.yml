@@ -1,0 +1,57 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                fetch-depth: 0
+
+            - name: Login to GitHub Container Registry
+              uses: docker/login-action@v3
+              with:
+                registry: ghcr.io
+                username: ${{ github.actor }}
+                password: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Read Bedrock server version
+              id: version
+              run: |
+                BEDROCK_VERSION=$(cat version.txt)
+                echo "BEDROCK_VERSION=$BEDROCK_VERSION" >> $GITHUB_ENV
+
+                # Calculate the next tag
+                CURRENT_TAG="ghcr.io/i-segura/minecraft-bedrock-server:$BEDROCK_VERSION"
+                if docker pull $CURRENT_TAG 2>/dev/null; then
+                  LAST_REVISION=$(docker inspect $CURRENT_TAG --format '{{index .RepoTags 0}}' | cut -d'-' -f2)
+                  NEW_REVISION=$((LAST_REVISION + 1))
+                else
+                  NEW_REVISION=1
+                fi
+                echo "VERSION=$BEDROCK_VERSION-$NEW_REVISION" >> $GITHUB_ENV
+
+            - name: Build and push Docker image
+              uses: docker/build-push-action@v4
+              with:
+                push: true
+                tags: |
+                  ghcr.io/i-segura/minecraft-bedrock-server:${{ env.VERSION }}
+                  ghcr.io/i-segura/minecraft-bedrock-server:latest
+                build-args: |
+                  BEDROCK_VERSION=${{ env.BEDROCK_VERSION }}
+
+
+            
